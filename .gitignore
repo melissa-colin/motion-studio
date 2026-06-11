@@ -1,0 +1,50 @@
+# ---- Python bytecode / caches ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---- Build / packaging artifacts ----
+build/
+dist/
+.eggs/
+*.egg-info/
+*.egg
+wheels/
+MANIFEST
+
+# ---- C extensions ----
+*.so
+
+# ---- Test / lint / type caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Editor / OS cruft ----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ---- Runtime data (never commit user motions or caches) ----
+*.motion
+/cache/
+/workspace/
+MotionStudio/
+motion_studio/static/vendor/*.map
+
+# NOTE: docs/img/ is intentionally TRACKED (screenshots + demo GIF).

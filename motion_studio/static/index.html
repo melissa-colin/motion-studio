@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Motion Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" aria-hidden="true">
+  <div id="picker-box">
+    <h2 id="picker-title" data-i18n="load.project">Charger un projet</h2>
+    <input id="picker-search" type="text" aria-label="Filtrer les projets" data-i18n-ph="proj.search" placeholder="filtrer (nom, clip source…)" autocomplete="off">
+    <div id="picker-sort" role="group" aria-labelledby="picker-sort-label" data-metrics-only>
+      <span id="picker-sort-label" data-i18n="sort.label">Trier :</span>
+      <button class="sort-btn active" data-sort="" data-i18n="sort.az">A→Z</button>
+      <button class="sort-btn" data-sort="float" data-i18n="sort.float">Flottement</button>
+      <button class="sort-btn" data-sort="penetrate" data-i18n="sort.penetrate">Pénétration sol</button>
+      <button class="sort-btn" data-sort="skate" data-i18n="sort.skate">Skate</button>
+      <button class="sort-btn" data-sort="pfc" data-i18n="sort.pfc">PFC</button>
+      <button class="sort-btn" data-sort="self_pen" data-i18n="sort.self_pen">Auto-pén</button>
+      <button class="sort-btn" data-sort="inter_pen" data-i18n="sort.inter_pen">Inter-pén</button>
+      <button class="sort-btn" data-sort="jitter" data-i18n="sort.jitter">Jitter</button>
+    </div>
+    <div id="picker-list" role="listbox" aria-label="Liste des projets" tabindex="-1"></div>
+    <div id="picker-foot">
+      <span id="picker-count" role="status" aria-live="polite">…</span>
+      <button id="picker-close" data-i18n="picker.close">Fermer</button>
+    </div>
+  </div>
+</div>
+<div id="src-choice" role="dialog" aria-modal="true" aria-labelledby="src-choice-title" aria-hidden="true">
+  <div id="src-choice-box">
+    <h3 id="src-choice-title" data-i18n="src.title">Ce clip a déjà une version corrigée</h3>
+    <div class="nm" id="src-choice-name"></div>
+    <button id="src-open-original"><span data-i18n="src.original">Ouvrir l'original</span>
+      <span class="sub" data-i18n="src.original.sub">repartir de zéro</span></button>
+    <button id="src-open-corrected"><span data-i18n="src.corrected">Ouvrir la version corrigée</span>
+      <span class="sub" data-i18n="src.corrected.sub">poursuivre la correction</span></button>
+    <button id="src-choice-cancel" data-i18n="src.cancel">Annuler</button>
+  </div>
+</div>
+<!-- "Charger un fichier" : liste des .pkl bruts du dossier configure (GET /clips) -->
+<div id="pkl-modal" role="dialog" aria-modal="true" aria-labelledby="pkl-title" aria-hidden="true">
+  <div id="pkl-box">
+    <h2 id="pkl-title" data-i18n="pkl.title">Charger un fichier (.pkl)</h2>
+    <input id="pkl-search" type="text" aria-label="Filtrer les fichiers" data-i18n-ph="pkl.filter" placeholder="filtrer…" autocomplete="off">
+    <div id="pkl-list" role="listbox" aria-label="Liste des fichiers .pkl" tabindex="-1"></div>
+    <div id="pkl-foot">
+      <span id="pkl-count" role="status" aria-live="polite">…</span>
+      <button id="pkl-close" data-i18n="picker.close">Fermer</button>
+    </div>
+  </div>
+</div>
+<!-- "Charger un dossier" : 3 champs (pkl / videos / audio) + import batch en tache de fond -->
+<div id="folder-modal" role="dialog" aria-modal="true" aria-labelledby="folder-modal-title" aria-hidden="true">
+  <div id="folder-modal-box">
+    <h2 id="folder-modal-title" data-i18n="folder.title" data-i18n-title="folder.hint"
+      title="Champs optionnels : laisse vide pour le dossier par défaut. Chaque .pkl devient un projet .motion (vidéo + audio appariés par nom).">Charger un dossier</h2>
+    <div class="row"><label for="fm-pkl" data-i18n="folder.pkl">Pkl</label>
+      <input id="fm-pkl" type="text" placeholder="/path/to/pkl" style="flex:1" autocomplete="off">
+      <button id="fm-pkl-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+    <div class="row"><label for="fm-videos" data-i18n="folder.videos">Vidéos</label>
+      <input id="fm-videos" type="text" placeholder="/path/to/videos" style="flex:1" autocomplete="off">
+      <button id="fm-videos-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+    <div class="row"><label for="fm-audio" data-i18n="folder.audio">Audio</label>
+      <input id="fm-audio" type="text" placeholder="/path/to/audio" style="flex:1" autocomplete="off">
+      <button id="fm-audio-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+    <div class="ms-progress" id="fm-progress" style="display:none">
+      <div class="ms-progress-bar"><div class="ms-progress-fill" id="fm-progress-fill"></div></div>
+      <div class="small" id="fm-progress-txt" role="status" aria-live="polite"></div>
+    </div>
+    <div id="folder-status" class="small" role="status" aria-live="polite"></div>
+    <div class="row" style="justify-content:flex-end;gap:8px">
+      <button id="folder-cancel" data-i18n="src.cancel">Annuler</button>
+      <button id="folder-go" class="btn-green" data-i18n="folder.go">Importer le dossier</button>
+    </div>
+  </div>
+</div>
+<!-- UNE seule surcouche plein écran de chargement (clip + actions lourdes).
+     À l'ouverture d'un clip, elle reste jusqu'à ce que la 1re frame soit prête ;
+     le préchargement suivant (lecture/scrub) est silencieux. -->
+<div id="overlay" role="alertdialog" aria-modal="true" aria-hidden="true" aria-labelledby="overlay-msg"><div id="overlay-msg"></div><button id="overlay-skip" type="button" hidden data-i18n="overlay.skip">Passer</button></div>
+<!-- aide raccourcis clavier (touche « ? ») : modale accessible, Echap pour fermer -->
+<div id="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" aria-hidden="true">
+  <div id="shortcuts-box">
+    <h3 id="shortcuts-title" data-i18n="shortcuts.title">Raccourcis clavier</h3>
+    <div class="sc-list">
+      <div class="sc-row"><span class="sc-keys"><kbd>W</kbd></span><span class="sc-desc" data-i18n="shortcuts.translate">Outil translation (gizmo)</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>R</kbd></span><span class="sc-desc" data-i18n="shortcuts.rotate">Outil rotation (gizmo)</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>G</kbd></span><span class="sc-desc" data-i18n="shortcuts.grab">Translation (alias de W)</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd data-i18n="shortcuts.space">Espace</kbd></span><span class="sc-desc" data-i18n="shortcuts.play">Lecture / Pause</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>←</kbd><kbd>→</kbd></span><span class="sc-desc" data-i18n="shortcuts.step">Frame précédente / suivante</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>Ctrl</kbd><kbd>S</kbd></span><span class="sc-desc" data-i18n="shortcuts.save">Enregistrer la session (.motion)</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>Ctrl</kbd><kbd>⇧</kbd><kbd>S</kbd></span><span class="sc-desc" data-i18n="shortcuts.export">Exporter le .pkl</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Z</kbd></span><span class="sc-desc" data-i18n="shortcuts.undo">Annuler</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>Ctrl</kbd><kbd>Y</kbd></span><span class="sc-desc" data-i18n="shortcuts.redo">Rétablir</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>?</kbd></span><span class="sc-desc" data-i18n="shortcuts.help">Afficher cette aide</span></div>
+      <div class="sc-row"><span class="sc-keys"><kbd>Esc</kbd></span><span class="sc-desc" data-i18n="shortcuts.esc">Fermer une fenêtre / quitter un mode</span></div>
+    </div>
+    <div class="sc-foot"><button id="shortcuts-close" type="button" data-i18n="shortcuts.close">Fermer</button></div>
+  </div>
+</div>
+<!-- Version / À propos (menu Aide) : petite boîte affichant la version du serveur -->
+<div id="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title" aria-hidden="true">
+  <div id="about-box">
+    <h3 id="about-title" data-i18n="menu.about">Version / À propos</h3>
+    <div id="about-body" class="small" role="status" aria-live="polite"></div>
+    <div class="sc-foot"><button id="about-close" type="button" data-i18n="shortcuts.close">Fermer</button></div>
+  </div>
+</div>
+<!-- ============================================================
+     Barre de menus (style logiciel desktop) : marque + menus déroulants.
+     Tous les contrôles globaux/avancés vivent ici (mêmes ids que le JS).
+     ============================================================ -->
+<div id="menubar" role="menubar" aria-label="Barre de menus">
+  <div class="mb-brand">Motion Studio</div>
+
+  <!-- Fichier -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-file-btn" type="button" role="menuitem"
+      aria-haspopup="true" aria-expanded="false" aria-controls="menu-file"
+      data-i18n="menu.file">Fichier</button>
+    <div class="mb-drop" id="menu-file" role="menu" aria-label="Fichier">
+      <button id="load-file"    class="mb-item" role="menuitem" data-i18n="load.file">Charger un fichier</button>
+      <button id="load-project" class="mb-item" role="menuitem" data-i18n="load.project">Charger un projet</button>
+      <button id="load-folder"  class="mb-item" role="menuitem" data-i18n="load.folder">Charger un dossier</button>
+      <div class="mb-sep" role="separator"></div>
+      <button id="save-pill" class="mb-item" role="menuitem" data-i18n-title="save.tip" data-i18n-aria="save.tip"
+        aria-label="Enregistrer la session" title="Enregistrer la session dans le .motion (Ctrl+S)">
+        <span id="save-pill-txt" role="status" aria-live="polite" data-i18n="save.dirty">non sauvegardé</span></button>
+      <button id="export-pkl" class="mb-item" role="menuitem" data-i18n="export.pkl" data-i18n-title="export.pkl.tip"
+        title="Télécharger le .pkl corrigé (Ctrl+Maj+S)">Exporter (.pkl)</button>
+    </div>
+  </div>
+
+  <!-- Édition -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-edit-btn" type="button" role="menuitem"
+      aria-haspopup="true" aria-expanded="false" aria-controls="menu-edit"
+      data-i18n="menu.edit">Édition</button>
+    <div class="mb-drop" id="menu-edit" role="menu" aria-label="Édition">
+      <button id="undo" class="mb-item" role="menuitem" data-i18n="menu.undo" data-i18n-title="undo"
+        title="Annuler (Ctrl+Z)" disabled>Annuler</button>
+      <button id="redo" class="mb-item" role="menuitem" data-i18n="menu.redo" data-i18n-title="redo"
+        title="Rétablir (Ctrl+Y)" disabled>Rétablir</button>
+    </div>
+  </div>
+
+  <!-- Affichage -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-view-btn" type="button" role="menuitem"
+      aria-haspopup="true" aria-expanded="false" aria-controls="menu-view"
+      data-i18n="menu.view">Affichage</button>
+    <div class="mb-drop" id="menu-view" role="menu" aria-label="Affichage">
+      <!-- toggles scène : items cochables reflétant l'état .on des boutons -->
+      <button id="t-skel" class="mb-item mb-check on" role="menuitemcheckbox" aria-checked="true"
+        aria-pressed="true" data-i18n="display.skeleton">Squelette</button>
+      <button id="t-mesh" class="mb-item mb-check" role="menuitemcheckbox" aria-checked="false"
+        aria-pressed="false" data-i18n="display.mesh">Maillage</button>
+      <button id="t-ghost" class="mb-item mb-check" role="menuitemcheckbox" aria-checked="false"
+        aria-pressed="false" data-i18n="display.ghost" data-i18n-title="display.ghost.tip"
+        title="Maillage du motion d'origine (avant édition), semi-transparent">Fantôme avant</button>
+      <button id="floor-on" class="mb-item mb-check" role="menuitemcheckbox" aria-checked="false"
+        aria-pressed="false" data-i18n="display.floor">Sol estimé</button>
+      <button id="floor-dist" class="mb-item mb-check" role="menuitemcheckbox" aria-checked="false"
+        aria-pressed="false" data-i18n="display.floordist">Distance au sol</button>
+      <div class="mb-sep" role="separator"></div>
+      <button id="t-metrics" class="mb-item mb-check" role="menuitemcheckbox" aria-checked="false"
+        data-i18n="menu.metrics">Métriques</button>
+      <div class="mb-sep" role="separator"></div>
+      <button id="t-panel" class="mb-item mb-check on" role="menuitemcheckbox" aria-checked="true"
+        data-i18n="menu.panel">Panneau latéral</button>
+    </div>
+  </div>
+
+  <!-- Outils -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-tools-btn" type="button" role="menuitem"
+      aria-haspopup="true" aria-expanded="false" aria-controls="menu-tools"
+      data-i18n="menu.tools">Outils</button>
+    <div class="mb-drop" id="menu-tools" role="menu" aria-label="Outils">
+      <button id="refit-cur" class="mb-item" role="menuitem" data-i18n="refit.cur"
+        data-i18n-title="refit.tip" title="Recale le maillage SMPL sur les joints corrigés (frame courante).">Refit frame courante</button>
+      <button id="refit-all" class="mb-item" role="menuitem" data-i18n="refit.all"
+        data-i18n-title="refit.tip" title="Recale le maillage SMPL sur toutes les frames.">Refit tout</button>
+      <div class="mb-sep" role="separator"></div>
+      <!-- Correction automatique : sous-menu repliable (radios + bouton + statut) -->
+      <div class="mb-sub" id="correct-sub">
+        <button id="correct-sub-btn" class="mb-item mb-sub-top" type="button"
+          aria-haspopup="true" aria-expanded="false" aria-controls="correct-sub-panel"
+          data-i18n="correct.title" data-i18n-title="correct.hint"
+          title="Correction automatique (sol → pieds → glisse) puis recharge.">Correction automatique</button>
+        <div class="mb-sub-panel" id="correct-sub-panel" role="group" aria-label="Correction automatique">
+          <label class="mb-sub-radio">
+            <input type="radio" name="correct-input" id="correct-input-raw" value="raw" checked>
+            <span data-i18n="correct.input.raw">Depuis l'original (brut)</span>
+          </label>
+          <label class="mb-sub-radio">
+            <input type="radio" name="correct-input" id="correct-input-edited" value="edited">
+            <span data-i18n="correct.input.edited">Depuis mes modifs actuelles</span>
+          </label>
+          <button id="correct-motion" class="mb-item btn-green" role="menuitem" data-i18n="correct.btn"
+            data-i18n-title="correct.tip" title="Correction automatique (sol → pieds → glisse) puis recharge.">Corriger le mouvement</button>
+          <div id="correct-status" class="small mb-sub-status" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+      <button id="floor-recompute" class="mb-item" role="menuitem" data-i18n="floor.recompute"
+        data-i18n-title="floor.recompute.tip" title="Recalcule le sol sur l'état édité courant.">Recalculer le sol</button>
+    </div>
+  </div>
+
+  <!-- Paramètres -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-settings-btn" type="button" role="menuitem"
+      aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-pop"
+      data-i18n="menu.settings">Paramètres</button>
+  </div>
+
+  <!-- Aide -->
+  <div class="mb-menu">
+    <button class="mb-top" id="menu-help-btn" type="button" role="menuitem"
+      aria-haspopup="true" aria-expanded="false" aria-controls="menu-help"
+      data-i18n="menu.help">Aide</button>
+    <div class="mb-drop" id="menu-help" role="menu" aria-label="Aide">
+      <button id="help-btn" class="mb-item" role="menuitem" type="button" aria-haspopup="dialog"
+        data-i18n="menu.shortcuts" data-i18n-title="help.tip"
+        title="Raccourcis clavier (?)">Raccourcis clavier</button>
+      <button id="about-btn" class="mb-item" role="menuitem" type="button" data-i18n="menu.about">Version / À propos</button>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="view">
+    <!-- overlay metriques (physique) : reference (depart) vs actuel, CLIP ENTIER -->
+    <div id="metrics-panel">
+      <div class="mp-head">
+        <span class="mp-title" data-i18n="metrics.title">Métriques (physique)</span>
+        <span class="mp-tip" data-i18n="metrics.whole">tout le clip</span>
+      </div>
+      <table>
+        <tr class="mp-thead"><td></td><td class="mp-ref" data-i18n="metrics.head.ref">départ</td><td></td><td class="mp-cur" data-i18n="metrics.head.cur">actuel</td></tr>
+        <tbody id="mp-rows"></tbody>
+      </table>
+      <div class="mp-foot">
+        <span id="mp-status" class="mp-status" role="status" aria-live="polite" data-i18n="metrics.waiting">modifie puis « recalculer » pour comparer</span>
+        <button id="mp-clip" class="mp-clip" data-i18n="metrics.clipbtn">recalculer</button>
+      </div>
+      <div class="mp-tip" data-i18n="metrics.hint">vert = amélioré · rouge = empiré · vs métriques de référence</div>
+    </div>
+    <!-- SEULS contrôles permanents sur le canvas : croix d'orientation + barre de lecture -->
+    <div id="vp-overlay">
+      <!-- vues en pave directionnel (croix type fleches clavier) -->
+      <div class="grp" id="view-grp" role="group" aria-label="Orientation de la caméra">
+        <button id="v-top"    style="grid-area:top"   data-i18n-title="view.top"    data-i18n-aria="view.top"    aria-label="Dessus"  title="Dessus">↑</button>
+        <button id="v-left"   style="grid-area:left"  data-i18n-title="view.left"   data-i18n-aria="view.left"   aria-label="Gauche"  title="Gauche">←</button>
+        <button id="v-front"  style="grid-area:face"  data-i18n-title="view.front"  data-i18n-aria="view.front"  aria-label="Face"    title="Face">●</button>
+        <button id="v-right"  style="grid-area:right" data-i18n-title="view.right"  data-i18n-aria="view.right"  aria-label="Droite"  title="Droite">→</button>
+        <button id="v-bottom" style="grid-area:bot"   data-i18n-title="view.bottom" data-i18n-aria="view.bottom" aria-label="Dessous" title="Dessous">↓</button>
+        <button id="v-back"   style="grid-area:back"  data-i18n-title="view.back"   data-i18n-aria="view.back"   aria-label="Dos"     title="Dos">○</button>
+      </div>
+    </div>
+    <!-- panneau Paramètres : prefs persistees (langue, scene) + dossiers source -->
+    <div id="settings-pop" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true">
+      <div id="settings-pop-box">
+        <div class="set-head">
+          <h3 id="settings-title" data-i18n="settings.title">Réglages</h3>
+          <button id="settings-pop-close" class="ms-iconbtn" type="button" data-i18n-title="picker.close" title="Fermer">&#10005;</button>
+        </div>
+        <div class="set-group">
+          <div class="set-label" data-i18n="settings.lang.label">Langue</div>
+          <div class="set-row">
+            <span data-i18n="settings.lang">Langue de l'interface</span>
+            <select id="set-lang">
+              <option value="fr">FR</option>
+              <option value="en">EN</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
+        </div>
+        <div class="set-group">
+          <div class="set-label" data-i18n="settings.scene.label">Scène par défaut</div>
+          <div class="set-row"><label for="set-skel" data-i18n="display.skeleton">Squelette</label>
+            <input id="set-skel" type="checkbox"></div>
+          <div class="set-row"><label for="set-mesh" data-i18n="display.mesh">Maillage</label>
+            <input id="set-mesh" type="checkbox"></div>
+          <div class="set-row"><label for="set-floor" data-i18n="display.floor">Sol estimé</label>
+            <input id="set-floor" type="checkbox"></div>
+        </div>
+        <!-- source des donnees : data/videos/audio/SMPL regles depuis l'UI (zero CLI) -->
+        <div class="set-group">
+          <div class="set-label" data-i18n="settings.data.label">Dossiers source</div>
+          <div class="row"><label for="cfg-data" data-i18n="folder.pkl">Pkl</label>
+            <input id="cfg-data" type="text" placeholder="/path/to/pkl_dir" style="flex:1" autocomplete="off">
+            <button id="cfg-data-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+          <div class="row"><label for="cfg-videos" data-i18n="folder.videos">Videos</label>
+            <input id="cfg-videos" type="text" placeholder="/path/to/clip_videos" style="flex:1" autocomplete="off">
+            <button id="cfg-videos-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+          <div class="row"><label for="cfg-audio" data-i18n="folder.audio">Audio</label>
+            <input id="cfg-audio" type="text" placeholder="/path/to/audio" style="flex:1" autocomplete="off">
+            <button id="cfg-audio-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+          <div class="row"><label for="cfg-smpl" data-i18n="settings.smpl.label">SMPL</label>
+            <input id="cfg-smpl" type="text" placeholder="/path/to/smpl/models" style="flex:1" autocomplete="off">
+            <button id="cfg-smpl-browse" class="ms-iconbtn" type="button" data-i18n-title="browse.tip" title="Browse">&#128193;</button></div>
+          <div class="row"><button id="cfg-apply" class="u-flex1 btn-green"
+            data-i18n="settings.data.apply" data-i18n-title="settings.data.tip" title="Réglé une fois, mémorisé entre les lancements.">Apply &amp; remember</button></div>
+          <div id="cfg-status" class="small" role="status" aria-live="polite"></div>
+        </div>
+        <div class="set-foot" id="settings-plugins" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+    <div id="bar" role="group" aria-label="Lecture">
+      <button id="play" aria-label="Lecture / Pause" data-i18n-aria="play.toggle" title="Lecture / Pause">▶</button>
+      <span id="fid" class="pill">0</span>
+      <input id="frame" type="range" min="0" max="0" value="0" step="1" aria-label="Position dans la timeline (frame)" data-i18n-aria="frame.slider">
+      <span id="total" class="pill">/0</span>
+      <button id="music-toggle" aria-label="Son du clip" data-i18n-title="music.muted" data-i18n-aria="music.muted" title="Son du clip" disabled>🔇</button>
+    </div>
+    <!-- musique du clip (synchronisee a la timeline) — voir setMusicSrc / setFrame -->
+    <audio id="music" preload="auto" crossorigin="anonymous"></audio>
+    <!-- pied discret : plugins actifs (corrector / metrics), rempli depuis GET /info -->
+    <div id="plugin-footer" aria-hidden="true"></div>
+  </div>
+  <!-- poignée pour ré-ouvrir le panneau quand il est replié -->
+  <button id="side-expand" type="button" data-i18n-title="menu.panel.show" data-i18n-aria="menu.panel.show"
+    aria-label="Afficher le panneau" title="Afficher le panneau">&#9664;</button>
+  <div id="side">
+    <!-- topbar fixe -->
+    <div id="topbar">
+      <button id="side-collapse" class="ms-iconbtn" type="button" data-i18n-title="menu.panel.hide"
+        data-i18n-aria="menu.panel.hide" aria-label="Replier le panneau" title="Replier le panneau">&#9654;</button>
+      <div id="status" role="status" aria-live="polite">chargement…</div>
+      <div class="small" id="clip-info"></div>
+      <div class="small" id="buffer-status" role="status" aria-live="polite" hidden></div>
+    </div>
+
+    <!-- barre d'onglets -->
+    <div id="tabs" role="tablist" aria-label="Panneaux d'outils">
+      <button role="tab" id="tab-btn-clip"     aria-controls="tab-panel-clip"     aria-selected="false" tabindex="-1" data-tab="clip"  data-i18n="tab.clip">Clip</button>
+      <button role="tab" id="tab-btn-edit"     aria-controls="tab-panel-edit"     aria-selected="false" tabindex="-1" data-tab="edit"  data-i18n="tab.edit">Édition</button>
+      <button role="tab" id="tab-btn-floor"    aria-controls="tab-panel-floor"    aria-selected="false" tabindex="-1" data-tab="floor" data-i18n="tab.floor">Sol</button>
+      <button role="tab" id="tab-btn-video"    aria-controls="tab-panel-video"    aria-selected="false" tabindex="-1" data-tab="video" data-i18n="tab.video">Vidéo</button>
+      <button role="tab" id="tab-btn-comments" aria-controls="tab-panel-comments" aria-selected="false" tabindex="-1" data-tab="comments" aria-label="Commentaires" data-i18n="tab.comments">💬</button>
+    </div>
+
+    <div id="tab-body">
+      <!-- ===== ONGLET CLIP ===== -->
+      <!-- les 3 points d'entrée de chargement vivent dans le menu Fichier -->
+      <div class="tab-content" data-tab="clip" role="tabpanel" id="tab-panel-clip" aria-labelledby="tab-btn-clip" tabindex="0">
+        <div class="small" id="clip-info-full"></div>
+
+        <!-- liste unifiee des projets .motion : tri par colonne + recherche + navigation -->
+        <h2 data-i18n="proj.title">Projets</h2>
+        <div class="row ms-proj-bar">
+          <button id="proj-prev" class="ms-iconbtn" type="button" data-i18n-title="proj.prev" title="Précédent">&#9664;</button>
+          <input id="proj-search" type="text" data-i18n-ph="proj.search" placeholder="filtrer (nom, clip source…)" style="flex:1" autocomplete="off">
+          <button id="proj-next" class="ms-iconbtn" type="button" data-i18n-title="proj.next" title="Suivant">&#9654;</button>
+          <button id="proj-refresh" class="ms-iconbtn" type="button" data-i18n-title="proj.refresh" title="Rafraîchir">&#8635;</button>
+        </div>
+        <div id="proj-metrics-job" class="small" role="status" aria-live="polite" style="display:none">
+          <span id="proj-metrics-txt"></span>
+          <button id="proj-metrics-recalc" class="ms-linkbtn" type="button" data-i18n="proj.metrics.recalc">recalculer les métriques</button>
+        </div>
+        <!-- progression persistante de l'import de dossier (le modale se ferme aussitôt) -->
+        <div id="proj-import-job" class="small" role="status" aria-live="polite" style="display:none">
+          <span id="proj-import-txt"></span>
+        </div>
+        <div id="proj-table-wrap">
+          <table id="proj-table">
+            <thead><tr id="proj-head"></tr></thead>
+            <tbody id="proj-body"></tbody>
+          </table>
+        </div>
+        <div id="proj-count" class="small" role="status" aria-live="polite"></div>
+        <!-- "Data source" (pkl/videos/audio/SMPL) déplacé dans le menu Paramètres -->
+      </div>
+
+      <!-- ===== ONGLET ÉDITION ===== -->
+      <div class="tab-content" data-tab="edit" role="tabpanel" id="tab-panel-edit" aria-labelledby="tab-btn-edit" tabindex="0" hidden>
+        <h2 id="dancer-label" data-i18n="dancer.label">Danseur</h2>
+        <div class="row"><span id="dancer-swatch" aria-hidden="true"></span><select id="sel-d" aria-labelledby="dancer-label" style="flex:1"></select></div>
+
+        <!-- accordeon : Global -->
+        <details class="acc" id="acc-global" open>
+          <summary data-i18n="global.title">Global (tout le corps)</summary>
+          <div class="acc-body">
+            <div class="row"><label style="flex:0 0 auto"><input id="move-all" type="checkbox" checked>
+              <span data-i18n="global.allframes">Toutes les frames (décalage constant)</span></label></div>
+            <div class="step"><span class="axlbl" id="g-x-lbl" data-i18n="global.width">Largeur (X)</span>
+              <button id="g-x-minus" aria-label="Largeur (X) moins">−</button><span class="val" id="g-x-val" role="status" aria-live="polite" aria-labelledby="g-x-lbl">0.00 m</span><button id="g-x-plus" aria-label="Largeur (X) plus">+</button></div>
+            <div class="step"><span class="axlbl" id="g-z-lbl" data-i18n="global.height">Hauteur (Z)</span>
+              <button id="g-z-minus" aria-label="Hauteur (Z) moins">−</button><span class="val" id="g-z-val" role="status" aria-live="polite" aria-labelledby="g-z-lbl">0.00 m</span><button id="g-z-plus" aria-label="Hauteur (Z) plus">+</button></div>
+            <div class="step"><span class="axlbl" id="g-y-lbl" data-i18n="global.depth">Profond. (Y)</span>
+              <button id="g-y-minus" aria-label="Profondeur (Y) moins">−</button><span class="val" id="g-y-val" role="status" aria-live="polite" aria-labelledby="g-y-lbl">0.00 m</span><button id="g-y-plus" aria-label="Profondeur (Y) plus">+</button></div>
+            <div class="row"><label for="g-step" data-i18n="global.step">Pas (m)</label><input id="g-step" type="number" step="0.01" value="0.01"></div>
+            <div class="row"><button id="g-reset" style="flex:1" data-i18n="global.reset"
+              data-i18n-title="global.hint" title="⚠ Décalage constant = pas de tremblement. Tire le gizmo au bassin, ou utilise les boutons ±.">Réinitialiser le déplacement</button></div>
+
+            <hr class="ms-sep">
+            <div class="row"><label style="flex:0 0 auto"><input id="stretch-mode" type="checkbox">
+              <span data-i18n="stretch.mode" data-i18n-title="stretch.modehint"
+                title="Ancre le danseur au début, va à la fin, place-le à la bonne distance : l’outil étire le déplacement entre les deux points en gardant la forme du mouvement.">Étirer le déplacement</span></label></div>
+            <div id="stretch-box" hidden>
+              <div class="row" style="margin-top:6px;gap:4px">
+                <button id="stretch-anchor" style="flex:1" data-i18n="stretch.anchor">Ancrer ici</button>
+                <button id="stretch-setpt" class="u-flex1 btn-primary" data-i18n="stretch.setpt">Poser/maj le point ici</button></div>
+              <div class="small" id="stretch-curoff"></div>
+              <div class="small stretch-pts-head"><span data-i18n="stretch.pts">Points cibles</span> :</div>
+              <div id="stretch-frieze" style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;min-height:20px"></div>
+              <div class="row" style="gap:4px">
+                <button id="stretch-delpt" style="flex:1" data-i18n="stretch.delpt">Supprimer le point courant</button>
+                <button id="stretch-clearpts" style="flex:1" data-i18n="stretch.clearpts">Tout effacer</button></div>
+            </div>
+          </div>
+        </details>
+
+        <!-- accordeon : Joints -->
+        <details class="acc" id="acc-joints">
+          <summary data-i18n="joints.title">Joints (détail par articulation)</summary>
+          <div class="acc-body">
+            <div class="row"><label for="sel-j" data-i18n="joint.label">Joint</label><select id="sel-j" style="flex:1"></select></div>
+            <div class="row" style="gap:8px">
+              <div style="flex:1;text-align:center"><div class="small" id="j-x-lbl">X</div><input id="j-x" type="number" step="0.01" aria-label="Joint X" aria-labelledby="j-x-lbl" style="width:100%;box-sizing:border-box"></div>
+              <div style="flex:1;text-align:center"><div class="small" id="j-y-lbl">Y</div><input id="j-y" type="number" step="0.01" aria-label="Joint Y" aria-labelledby="j-y-lbl" style="width:100%;box-sizing:border-box"></div>
+              <div style="flex:1;text-align:center"><div class="small" id="j-z-lbl">Z</div><input id="j-z" type="number" step="0.01" aria-label="Joint Z" aria-labelledby="j-z-lbl" style="width:100%;box-sizing:border-box"></div>
+            </div>
+            <div class="row"><button id="reset-j" style="flex:1" data-i18n="joint.reset"
+              data-i18n-title="joint.hint" title="Clique un joint en 3D · W translate · R rotate gizmo.">Annuler ce joint (frame)</button></div>
+          </div>
+        </details>
+
+        <!-- Recalcul SMPL : action « Refit » dans le menu Outils ; statut ici -->
+        <h2 data-i18n="refit.title">Recalculer SMPL</h2>
+        <div id="refit-status" class="small" role="status" aria-live="polite"
+          data-i18n-title="refit.hint" title="Le Refit (menu Outils) recale le maillage SMPL sur les joints corrigés."></div>
+        <!-- Correction automatique : déplacée dans le menu Outils (sous-menu). -->
+      </div>
+
+      <!-- ===== ONGLET SOL ===== -->
+      <!-- « Recalculer le sol » : action déplacée dans le menu Outils -->
+      <div class="tab-content" data-tab="floor" role="tabpanel" id="tab-panel-floor" aria-labelledby="tab-btn-floor" tabindex="0" hidden>
+        <div class="small" id="floor-info"></div>
+        <div class="small" id="floor-recompute-status" role="status" aria-live="polite"></div>
+
+        <details class="acc" id="acc-floor" open>
+          <summary data-i18n="floor.correct.title">Corriger le sol</summary>
+          <div class="acc-body">
+            <div class="row"><label for="floor-variant" data-i18n="floor.variant">Variante</label>
+              <select id="floor-variant" style="flex:1">
+                <option value="corrected" data-i18n="floor.var.corrected">Corrigé</option>
+                <option value="raw" data-i18n="floor.var.raw">Brut</option>
+                <option value="manual" data-i18n="floor.var.manual">Manuel</option>
+              </select></div>
+            <div class="row"><button id="floor-edit" style="flex:1" data-i18n="floor.editmode"
+              data-i18n-title="floor.hint" title="En mode correction : un repère 3D apparaît sur le damier (rotation pour incliner, flèche Z pour la hauteur). « Enregistrer » écrit le sol manuel pour ce clip.">Corriger le sol</button></div>
+            <div class="row"><label for="floor-tx" data-i18n="floor.tiltx">Inclinaison X (°)</label>
+              <input id="floor-tx" type="number" step="0.1" disabled></div>
+            <div class="row"><label for="floor-ty" data-i18n="floor.tilty">Inclinaison Y (°)</label>
+              <input id="floor-ty" type="number" step="0.1" disabled></div>
+            <div class="row"><label for="floor-h" data-i18n="floor.heightm">Hauteur (m)</label>
+              <input id="floor-h" type="number" step="0.01" disabled></div>
+            <div class="row">
+              <button id="floor-reset" style="flex:1" disabled data-i18n="floor.reset">Réinitialiser</button>
+              <button id="floor-save" class="u-flex1 btn-green" disabled data-i18n="floor.save">Enregistrer le sol corrigé</button></div>
+            <div class="small" id="floor-save-status" role="status" aria-live="polite"></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- ===== ONGLET VIDÉO ===== -->
+      <div class="tab-content" data-tab="video" role="tabpanel" id="tab-panel-video" aria-labelledby="tab-btn-video" tabindex="0" hidden>
+        <details class="acc" id="acc-bg" open>
+          <summary data-i18n="bg.title">Vidéo de fond</summary>
+          <div class="acc-body">
+            <div class="row"><label for="bg-on" data-i18n="bg.visible">Visible</label><input id="bg-on" type="checkbox" checked></div>
+            <div class="row"><label data-i18n="bg.move">Déplacer fond</label>
+              <button id="bg-move" title="déplacer le fond avec la souris" data-i18n="bg.movebtn">Déplacer fond</button></div>
+            <div class="row"><label for="bg-x" data-i18n="bg.posx">Pos X</label><input id="bg-x" type="number" step="0.05" value="0"></div>
+            <div class="row"><label for="bg-y" data-i18n="bg.posy">Pos Y (prof.)</label><input id="bg-y" type="number" step="0.05" value="0.25"></div>
+            <div class="row"><label for="bg-z" data-i18n="bg.posz">Pos Z</label><input id="bg-z" type="number" step="0.05" value="0.05"></div>
+            <div class="row"><label for="bg-s" data-i18n="bg.scale">Échelle</label><input id="bg-s" type="number" step="0.05" value="0.5"></div>
+            <div class="row"><label for="bg-o" data-i18n="bg.opacity">Opacité</label><input id="bg-o" type="range" min="0" max="1" step="0.05" value="1"></div>
+            <div class="row"><label for="bg-remove" data-i18n="bg.removebg">Remove background</label><input id="bg-remove" type="checkbox"><span id="bg-seg-status" class="small" role="status" aria-live="polite" style="margin-left:4px"></span></div>
+
+            <hr class="ms-sep tight">
+            <div class="small bg-import-head" data-i18n="bg.import.title">Importer / remplacer le média</div>
+            <div class="row"><label for="bg-import-video-file" data-i18n="bg.import.video">Vidéo</label>
+              <input id="bg-import-video-file" type="file" accept="video/*,.mp4" style="flex:1"></div>
+            <div class="row"><button id="bg-import-video" class="u-flex1 btn-primary" data-i18n="bg.import.replace">Importer / remplacer</button></div>
+            <div id="bg-import-video-status" class="small" role="status" aria-live="polite"></div>
+            <div class="row"><label for="bg-import-music-file" data-i18n="bg.import.music">Musique</label>
+              <input id="bg-import-music-file" type="file" accept="audio/*,.wav,.mp3" style="flex:1"></div>
+            <div class="row"><button id="bg-import-music" class="u-flex1 btn-primary" data-i18n="bg.import.replace">Importer / remplacer</button></div>
+            <div id="bg-import-music-status" class="small" role="status" aria-live="polite"></div>
+
+          </div>
+        </details>
+      </div>
+
+      <!-- ===== ONGLET COMMENTAIRES (chat par clip) ===== -->
+      <div class="tab-content" data-tab="comments" role="tabpanel" id="tab-panel-comments" aria-labelledby="tab-btn-comments" tabindex="0" hidden>
+        <div class="row"><label for="comment-user" data-i18n="comments.you">Ton nom</label>
+          <input id="comment-user" type="text" style="flex:1" autocomplete="off"></div>
+        <div id="comment-list" role="log" aria-live="polite" aria-label="Commentaires"></div>
+        <div id="comment-disabled" class="small" style="display:none" data-i18n="comments.disabled">commentaires indisponibles pour les clips importés</div>
+        <div class="row" id="comment-compose">
+          <input id="comment-text" type="text" aria-label="Écrire un commentaire" style="flex:1" data-i18n-ph="comments.placeholder" placeholder="écrire un commentaire…" autocomplete="off">
+          <button id="comment-send" class="btn-green" data-i18n="comments.send">Envoyer</button></div>
+        <div id="comment-status" class="small" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+    <!-- statut sauvegarde/export (hors onglets : le contrôle est en haut de l'écran) -->
+    <div id="save-status" class="small" role="status" aria-live="polite" style="display:none"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+  "three/addons/controls/TransformControls.js": "./vendor/TransformControls.js"
+}}
+</script>
+
+<script type="module" src="app.js"></script>
+  <!-- navigateur de dossiers (panneau Source) -->
+  <div id="browse-modal" class="ms-modal" style="display:none" role="dialog" aria-modal="true" data-i18n-aria="browse.title" aria-label="Choose a folder">
+    <div class="ms-modal-box">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <strong data-i18n="browse.title">Choose a folder</strong>
+        <button id="browse-close" class="ms-iconbtn" type="button" data-i18n-title="picker.close" title="Close">&#10005;</button>
+      </div>
+      <div id="browse-cur" class="small" style="word-break:break-all;margin:6px 0"></div>
+      <div id="browse-list" class="browse-list"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:8px">
+        <button id="browse-choose" class="btn-green" data-i18n="browse.choose">Choose this folder</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

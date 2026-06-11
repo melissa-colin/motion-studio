@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motion-studio"
+description = "A clean, installable multi-person SMPL motion editor with pluggable auto-correction and metrics."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Melissa Colin", email = "github@melissacolin.ai" }]
+requires-python = ">=3.9"
+keywords = [
+    "smpl",
+    "motion",
+    "motion-capture",
+    "3d",
+    "animation",
+    "pose",
+    "dance",
+    "editor",
+    "visualization",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: POSIX :: Linux",
+    "Intended Audience :: Science/Research",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+dynamic = ["version"]
+dependencies = [
+    "numpy",
+    "flask>=3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/melissa-colin/motion-studio"
+Repository = "https://github.com/melissa-colin/motion-studio"
+Documentation = "https://github.com/melissa-colin/motion-studio#readme"
+Issues = "https://github.com/melissa-colin/motion-studio/issues"
+
+# Heavy/optional extras: pose refit, SMPL forward kinematics, built-in
+# corrector and metrics, server-side background removal, music import.
+[project.optional-dependencies]
+smpl = ["torch", "smplx"]
+video = ["pillow", "torchvision", "librosa", "scipy"]
+all = ["torch", "smplx", "pillow", "torchvision", "librosa", "scipy"]
+dev = ["pytest"]
+
+[project.scripts]
+motion-studio = "motion_studio.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["motion_studio*"]
+
+[tool.setuptools.package-data]
+motion_studio = ["static/**/*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "motion_studio.__version__" }
+
+[tool.ruff]
+line-length = 80
+# Vendored / copied research code is not ours to restyle; exclude it from
+# linting and formatting. One-off maintenance scripts are excluded too.
+extend-exclude = [
+    "motion_studio/plugins_builtin/corrector_impl.py",
+    "motion_studio/plugins_builtin/metrics_live.py",
+    "motion_studio/plugins_builtin/utils",
+    "scripts",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "D"]
+# D107: a separate __init__ docstring is redundant when the class docstring
+# already documents construction (matches Google style guidance).
+ignore = ["D107", "UP031"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and examples are illustrative; do not require full docstrings there.
+"tests/*" = ["D"]
+"examples/*" = ["D"]
+"conftest.py" = ["D"]
+
+[tool.black]
+line-length = 80
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "torch: tests that require torch.",
+    "smpl: tests that require SMPL model files.",
+]
