@@ -87,8 +87,9 @@ at your local copy with `--smpl-dir`.
 
 ```bash
 motion-studio --port 8815
-# optional: point at your own plugins
-motion-studio --corrector ./my.py:MyCorrector --metrics ./my.py:MyMetrics
+# optional: point at your own plugins (corrector / metrics / floor estimator)
+motion-studio --corrector ./my.py:MyCorrector --metrics ./my.py:MyMetrics \
+              --floor ./my.py:MyFloor
 ```
 
 Then open <http://127.0.0.1:8815>.
@@ -125,8 +126,9 @@ motion-studio metrics in.motion --metrics ./my.py:MyMetrics
 motion-studio --version
 ```
 
-`--corrector` / `--metrics` take a plugin spec (`<module-or-path>:<Class>`),
-the same as the server flags; omit them to use the built-in plugins.
+`--corrector` / `--metrics` / `--floor` take a plugin spec
+(`<module-or-path>:<Class>`), the same as the server flags; omit them to use
+the built-in plugins.
 
 ---
 
@@ -203,6 +205,10 @@ class MotionCorrector(Protocol):
 class MotionMetrics(Protocol):
     def __init__(self, *, smpl_dir): ...
     def compute(self, motion: Motion, floor: Floor) -> dict[str, float]: ...
+
+class MotionFloor(Protocol):
+    def __init__(self, *, smpl_dir): ...
+    def estimate(self, motion: Motion) -> Floor: ...
 ```
 
 `Motion` and `Floor` are the only types exchanged
@@ -229,14 +235,16 @@ effect on the next click:
 
 ```bash
 motion-studio --corrector ./my_corrector.py:MyCorrector \
-              --metrics   ./my_metrics.py:MyMetrics
+              --metrics   ./my_metrics.py:MyMetrics \
+              --floor     ./my_floor.py:MyFloor
 ```
 
 The built-in plugins live in `motion_studio/plugins_builtin/`. They are
-deliberately simple reference implementations — a floor-grounding corrector and
-a handful of geometric metrics — there to make the editor work out of the box,
-not a research-grade physics pipeline. Point `--corrector`/`--metrics` at your
-own classes for anything more.
+deliberately simple reference implementations — a floor-grounding corrector, a
+handful of geometric metrics, and a lowest-foot-points RANSAC floor estimator —
+there to make the editor work out of the box, not a research-grade physics
+pipeline. Point `--corrector` / `--metrics` / `--floor` at your own classes for
+anything more.
 
 **New to plugins?** See the full authoring guide in
 [`docs/PLUGINS.md`](docs/PLUGINS.md) and the runnable, dependency-light
