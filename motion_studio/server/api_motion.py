@@ -722,7 +722,11 @@ def correct_motion():
             )
             metrics_vals = None
             try:
-                metrics_vals = _metrics_for_motion(st, corrected, None)
+                metrics_vals = _metrics_for_motion(
+                    st,
+                    corrected,
+                    loaders.active_floor_plane(st, clip, corrected),
+                )
             except Exception as e:  # noqa: BLE001
                 log_lines.append(f"metrics failed: {e}")
             dt = time.time() - t0
@@ -839,7 +843,9 @@ def source_metrics():
         return json_error(f"unknown clip: {clip}", 404)
     try:
         with st.heavy():
-            vals = _metrics_for_motion(st, motion, None)
+            vals = _metrics_for_motion(
+                st, motion, loaders.active_floor_plane(st, clip, motion)
+            )
     except HeavyBusyError as e:
         return json_error(str(e), 503)
     except PluginLoadError as e:

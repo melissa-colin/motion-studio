@@ -146,17 +146,22 @@ def _bundle_has_metrics(path: str) -> bool:
     return bool(ref)
 
 
-def _compute_ref_metrics(st, motion) -> dict:
-    """Score ``motion`` with the configured metrics plugin (floor z = 0).
+def _compute_ref_metrics(st, clip, motion) -> dict:
+    """Score ``motion`` with the configured metrics plugin against its floor.
 
-    Mirrors ``/source_metrics``: the reference metrics are computed against the
-    ``z = 0`` plane so they are comparable across the whole library.
+    The reference metrics are computed against the clip's actual floor (the
+    saved manual plane if any, else the estimated one), so they match the floor
+    the editor displays and the metrics plugin actually uses.
     """
     from motion_studio.core.plugins import load_metrics
     from motion_studio.core.types import Floor
 
+    from . import loaders
+
+    plane = loaders.active_floor_plane(st, clip, motion)
+    floor = Floor(plane=plane if plane else (0.0, 0.0, 0.0))
     plugin = load_metrics(st.config.metrics_spec, smpl_dir=st.config.smpl_dir)
-    raw = plugin.compute(motion, Floor(plane=(0.0, 0.0, 0.0)))
+    raw = plugin.compute(motion, floor)
     import numpy as np
 
     out: dict[str, float] = {}
@@ -200,7 +205,7 @@ def compute_and_cache_ref(st, clip: str, motion) -> dict:
         return {}
     try:
         with st.heavy():
-            scores = _compute_ref_metrics(st, motion)
+            scores = _compute_ref_metrics(st, clip, motion)
         bundle_mod.update_manifest_metrics(path, scores)
         return scores
     except Exception:  # noqa: BLE001 - metrics are best-effort on open
@@ -253,7 +258,7 @@ def start_metrics(st, force: bool = False) -> bool:
                 # Background priority: never starve the interactive editor of
                 # the single GPU lock while warming the whole library.
                 with st.heavy_idle():
-                    scores = _compute_ref_metrics(st, motion)
+                    scores = _compute_ref_metrics(st, name, motion)
                 bundle_mod.update_manifest_metrics(path, scores)
                 with _lock:
                     _metrics["done"] += 1

@@ -14,6 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at least one selected tag). Stored workspace-level in `tags.json`, not in the
   `.motion` bundles. New endpoints `GET /tags` and `POST /tags`.
 
+### Changed
+
+- **Reference metrics are scored against the clip's active floor** — the saved
+  manual plane if the user hand-edited one (`floors_manual.json`), else the
+  estimated plane — instead of the fixed `z = 0` plane. The metrics now match
+  the floor the editor displays and the metrics plugin actually uses. A
+  hand-saved manual floor also persists across reloads.
+
 ## [0.1.3] - 2026-06-11
 
 ### Changed

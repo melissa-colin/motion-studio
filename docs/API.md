@@ -20,7 +20,9 @@ if they contain `/`, `..`, or start with `.`.
   (headers `X-Mesh-Shape`, `X-Mesh-Time`)
 - `GET /foot_masks` -> `{left:[...], right:[...]}`
 - `GET /music?clip=&source=` -> audio, supports HTTP `Range`
-- `GET /source_metrics?clip=&source=` -> `{ok, metrics:{...}}` (exact pkl metrics)
+- `GET /source_metrics?clip=&source=` -> `{ok, metrics:{...}}` (exact pkl metrics,
+  scored against the clip's active floor: the saved manual plane if any, else the
+  estimated one)
 - `POST /refit` body `{N,T,J,joints,frames?,clip?,source?}` -> binary verts
   (headers `X-Refit-Shape`, `X-Refit-Frames`, `X-Refit-Err`)
 - `POST /metrics` body `{N,T,J,joints,clip?,source?,plane?,fps?,want_verts?}`
@@ -32,7 +34,8 @@ if they contain `/`, `..`, or start with `.`.
   -> `{ok, N, T, J, joints, metrics:{...}, mode, time_s, log}`
   Runs the **corrector plugin** (`--corrector`) in a fresh import each call;
   returns FK joints + metrics as *pending* edits (does NOT save).
-  Metrics come from the **metrics plugin** (`--metrics`).
+  Metrics come from the **metrics plugin** (`--metrics`), scored against the
+  clip's active floor (manual plane if saved, else the estimated one).
 - `POST /metrics_all` -> `{ok, started}`
   (Re)compute every bundle's reference metrics in the **background**.
 - `GET /metrics_status` -> `{running, total, done, failed, current}`

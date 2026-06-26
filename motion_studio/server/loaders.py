@@ -8,6 +8,7 @@ optional ``pkl_dir``. They are used by ``/load``, ``/bundle/load``,
 
 from __future__ import annotations
 
+import json
 import os
 
 from motion_studio.bundle import Bundle, load_bundle
@@ -97,14 +98,72 @@ def bundle_video_file(st: ServerState, name: str, bundle: Bundle) -> str | None:
     return video_cache.bundle_video_path(st.config, name, bundle.video)
 
 
+def read_manual_floor(workspace: str, clip: str) -> dict | None:
+    """Return the saved manual floor for ``clip`` (``floors_manual.json``).
+
+    ``/save_floor`` persists a hand-edited plane to
+    ``workspace/floors_manual.json`` keyed by clip name. This reads it back so
+    the manual floor survives a reload.
+
+    Args:
+      workspace: The server workspace root.
+      clip: Clip / bundle name.
+
+    Returns:
+      ``{"plane": [a, b, c], "tilt_deg": float, "source": "manual"}`` or None.
+    """
+    store = os.path.join(workspace, "floors_manual.json")
+    if not os.path.isfile(store):
+        return None
+    try:
+        with open(store, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    entry = data.get(clip) if isinstance(data, dict) else None
+    if isinstance(entry, dict) and "plane" in entry:
+        return entry
+    return None
+
+
+def active_floor_plane(
+    st: ServerState, clip: str, motion: Motion
+) -> tuple[float, float, float] | None:
+    """Return the clip's active floor plane for metrics scoring.
+
+    The saved manual plane if the user hand-edited one (``floors_manual.json``),
+    otherwise the estimated plane (cached). This is the same plane the editor
+    displays, so metrics are scored against the floor the user actually sees.
+
+    Args:
+      st: The server state.
+      clip: Clip / bundle name.
+      motion: The motion to estimate the floor for if no manual one is saved.
+
+    Returns:
+      ``(a, b, c)`` of ``z = a*x + b*y + c``, or None if no floor is available.
+    """
+    manual = read_manual_floor(st.config.workspace, clip)
+    if manual is not None:
+        p = manual["plane"]
+        return (float(p[0]), float(p[1]), float(p[2]))
+    entry = video_cache.estimate_floor(st, clip, motion)
+    if entry is not None:
+        p = entry["plane"]
+        return (float(p[0]), float(p[1]), float(p[2]))
+    return None
+
+
 def attach_floor(
     st: ServerState, scene: dict, name: str, motion: Motion
 ) -> dict:
     """Estimate and attach a single ground plane to ``scene``.
 
     Sets ``scene['floor']`` to ``[a, b, c]`` (plus ``floors``/``floor_meta``)
-    so the Sol tab shows a plane on load. The plane comes from the configured
-    floor plugin (see ``config.floor_spec``). Run under ``heavy_lock``.
+    so the Sol tab shows a plane on load. The estimated plane comes from the
+    configured floor plugin (``config.floor_spec``); a hand-saved manual floor
+    (``floors_manual.json``) overrides it as the active plane so manual edits
+    persist across reloads. Run under ``heavy_lock``.
 
     Args:
       st: The server state.
@@ -116,15 +175,37 @@ def attach_floor(
       The same ``scene`` dict, mutated in place.
     """
     entry = video_cache.estimate_floor(st, name, motion)
-    if entry is None:
+    manual = read_manual_floor(st.config.workspace, name)
+    if entry is None and manual is None:
         return scene
-    plane = entry["plane"]
-    scene["floor"] = plane
-    scene["floors"] = {"raw": plane, "corrected": plane}
+
+    floors: dict = {}
+    if entry is not None:
+        raw = entry["plane"]
+        floors["raw"] = raw
+        floors["corrected"] = raw
+        active = raw
+        source = "ransac"
+        tilt = entry.get("tilt_deg")
+        n_contacts = entry.get("n_contacts")
+    else:
+        active = None
+        source = "manual"
+        tilt = None
+        n_contacts = None
+    if manual is not None:
+        floors["manual"] = manual["plane"]
+        active = manual["plane"]
+        source = "manual"
+        tilt = manual.get("tilt_deg", tilt)
+
+    scene["floor"] = active
+    scene["floors"] = floors
     scene["floor_meta"] = {
-        "tilt_deg": entry.get("tilt_deg"),
-        "n_contacts": entry.get("n_contacts"),
-        "source": "ransac",
+        "tilt_deg": tilt,
+        "n_contacts": n_contacts,
+        "source": source,
+        "has_manual": manual is not None,
     }
     return scene
 

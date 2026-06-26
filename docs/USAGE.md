@@ -80,9 +80,12 @@ The bottom-left **Metrics** panel shows reference vs. current values
 
 The ground plane is **estimated on load** and drawn in the scene. In the
 **Floor** tab you can switch variants, edit the plane by hand, or recompute it.
-Floor estimation is a plugin (`MotionFloor`): the bundled default is a generic
-lowest-foot-points RANSAC fit — point `--floor <module-or-path>:<Class>` at your
-own estimator for anything more sophisticated (see [PLUGINS.md](PLUGINS.md)).
+A hand-edited plane is saved per workspace and **persists across reloads**.
+Reference metrics are scored against this **active floor** (your manual plane if
+you saved one, else the estimated plane), so the numbers match the floor you
+actually see. Floor estimation is a plugin (`MotionFloor`): the bundled default
+is a generic lowest-foot-points RANSAC fit — point `--floor <module-or-path>:<Class>`
+at your own estimator for anything more sophisticated (see [PLUGINS.md](PLUGINS.md)).
 
 ## 6. Video & music background
 
