@@ -378,6 +378,35 @@
   .proj-pending{color:var(--ms-muted-2);font-style:italic}
   #proj-count{margin-top:var(--ms-sp-1);color:var(--ms-muted)}
 
+  /* ---- tags libres par clip : cellule editable + filtre ---- */
+  #proj-table th.proj-th.tags{cursor:default}
+  #proj-table td.tags-cell{min-width:140px}
+  .proj-tags{display:flex;flex-wrap:wrap;gap:var(--ms-sp-1);align-items:center}
+  .proj-tag{display:inline-flex;align-items:center;gap:2px;
+    background:var(--ms-control);color:var(--ms-text-2);
+    border-radius:var(--ms-r-4);padding:1px var(--ms-sp-1) 1px var(--ms-sp-2);
+    font-size:var(--ms-fs-1);line-height:1.5;white-space:nowrap}
+  .proj-tag-x{background:transparent;border:0;color:var(--ms-muted);cursor:pointer;
+    padding:0 2px;font-size:var(--ms-fs-2);line-height:1;border-radius:var(--ms-r-1)}
+  .proj-tag-x:hover{color:var(--ms-amber);background:var(--ms-control-hover)}
+  .proj-tag-add{background:transparent;border:1px dashed var(--ms-border-2);
+    color:var(--ms-muted);cursor:pointer;border-radius:var(--ms-r-4);
+    padding:1px var(--ms-sp-2);font-size:var(--ms-fs-1);white-space:nowrap}
+  .proj-tag-add:hover{color:var(--ms-text);border-color:var(--ms-accent);background:var(--ms-control)}
+  .proj-tag-input{background:var(--ms-control);border:1px solid var(--ms-accent);
+    color:var(--ms-text);border-radius:var(--ms-r-2);padding:1px var(--ms-sp-2);
+    font-size:var(--ms-fs-1);width:90px}
+
+  .proj-tag-filter{display:flex;flex-wrap:wrap;gap:var(--ms-sp-1);align-items:center;
+    margin-top:var(--ms-sp-2)}
+  .proj-tagf-label{color:var(--ms-muted);font-size:var(--ms-fs-1);margin-right:var(--ms-sp-1)}
+  .proj-tagf-chip{background:var(--ms-control);border:1px solid var(--ms-border-2);
+    color:var(--ms-text-2);cursor:pointer;border-radius:var(--ms-r-4);
+    padding:1px var(--ms-sp-2);font-size:var(--ms-fs-1);white-space:nowrap}
+  .proj-tagf-chip:hover{background:var(--ms-control-hover)}
+  .proj-tagf-chip.active{background:var(--ms-green-soft);border-color:var(--ms-accent);
+    color:var(--ms-text)}
+
   /* ---- modale "Charger un fichier" (.pkl) : meme look que #picker ---- */
   #pkl-modal,#folder-modal{position:fixed;inset:0;background:var(--ms-overlay);display:none;z-index:55;
     align-items:center;justify-content:center}

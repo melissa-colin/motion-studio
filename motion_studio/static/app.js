@@ -116,7 +116,9 @@ const I18N = {
     'proj.metrics.recalc':'recalculer les métriques',
     'proj.metrics.job':'métriques $done/$total$failed',  // ex : métriques 312/1624 · 2 échecs
     'col.name':'Nom','col.source':'Clip source','col.video':'Vidéo','col.music':'Musique','col.mtime':'Date',
-    'col.pending':'métrique en cours…',
+    'col.tags':'Tags','col.pending':'métrique en cours…',
+    'tags.add':'＋ tag','tags.placeholder':'nouveau tag…','tags.remove':'retirer',
+    'tags.filter':'filtrer par tag :','tags.all':'tous',
     // bundles .motion listés dans le sélecteur de clip — voir renderClipList()
     'tag.bundle':'.motion','tag.video':'vidéo','tag.novideo':'sans vidéo','ws.loading':'chargement de l’espace de travail…',
     'undo':'Annuler (Ctrl+Z)','redo':'Rétablir (Ctrl+Y)',
@@ -337,7 +339,9 @@ const I18N = {
     'proj.metrics.recalc':'recompute metrics',
     'proj.metrics.job':'metrics $done/$total$failed',
     'col.name':'Name','col.source':'Source clip','col.video':'Video','col.music':'Music','col.mtime':'Date',
-    'col.pending':'metric in progress…',
+    'col.tags':'Tags','col.pending':'metric in progress…',
+    'tags.add':'＋ tag','tags.placeholder':'new tag…','tags.remove':'remove',
+    'tags.filter':'filter by tag:','tags.all':'all',
     'busy.load':'loading…',
     'settings.data.label':'Source folders','settings.data.tip':'Set once, remembered across launches — then run “motion-studio” with no arguments.',
     'settings.data.apply':'Apply & remember',
@@ -524,7 +528,9 @@ const I18N = {
     'proj.metrics.recalc':'重新计算指标',
     'proj.metrics.job':'指标 $done/$total$failed',
     'col.name':'名称','col.source':'源片段','col.video':'视频','col.music':'音乐','col.mtime':'日期',
-    'col.pending':'指标计算中…',
+    'col.tags':'标签','col.pending':'指标计算中…',
+    'tags.add':'＋ 标签','tags.placeholder':'新标签…','tags.remove':'移除',
+    'tags.filter':'按标签筛选：','tags.all':'全部',
     'busy.load':'加载中…',
     'settings.data.label':'源文件夹','settings.data.tip':'设置一次，跨启动记忆——然后无需参数运行“motion-studio”。',
     'settings.data.apply':'应用并记住',
@@ -601,6 +607,8 @@ function applyLang(lang){
   if(typeof renderEmptyState==='function') renderEmptyState();      // empty-state (re)traduit si pas de clip
   const sl=$('set-lang'); if(sl) sl.value=LANG;                     // selecteur de langue du panneau reglages
   if(typeof renderPluginInfo==='function') renderPluginInfo();      // pied "plugins actifs" re-localise
+  if(typeof renderTagFilter==='function') renderTagFilter();        // libelles filtre par tag
+  if(typeof renderProjectList==='function' && WORKSPACE) renderProjectList(); // en-tete Tags + cellules
 }
 
 // ---- config : quel clip charger ----
@@ -692,6 +700,10 @@ let PROJ_HAS_METRICS=false;  // GET /get_config.has_metrics : colonnes metriques
 let PROJ_SORT_KEY='name';    // colonne de tri courante (name|source_clip|has_video|has_music|mtime|<metrique>)
 let PROJ_SORT_DIR=1;         // 1 = asc, -1 = desc
 let PROJ_FILTER='';          // texte de recherche (nom + source_clip)
+// ---- tags libres par clip (GET/POST /tags) : tri en listes/categories ----
+let PROJ_TAGS={};            // { '<clip>': ['parfait','sol cassé'], ... } (GET /tags)
+let PROJ_ALL_TAGS=[];        // union triee de tous les tags utilises (suggestions + filtre)
+let PROJ_TAG_FILTER=new Set();// tags actifs dans le filtre : un clip passe s'il a AU MOINS un (ANY)
 let PROJ_CURRENT=null;       // nom du projet actuellement charge (surlignage + nav)
 let _projOrder=[];           // ordre courant (tri+filtre) des noms, pour la nav ◀ ▶
 let _metricsPollTimer=null;  // polling GET /metrics_status (job metriques de fond)
@@ -4755,6 +4767,9 @@ function _projSorted(){
   if(f) list=list.filter(b=>
     (b.name||'').toLowerCase().includes(f) ||
     (b.source_clip||'').toLowerCase().includes(f));
+  // filtre par tags (ANY) : un clip passe s'il porte au moins un tag actif.
+  if(PROJ_TAG_FILTER.size) list=list.filter(b=>
+    clipTags(b.name).some(tg=>PROJ_TAG_FILTER.has(tg)));
   const key=PROJ_SORT_KEY, dir=PROJ_SORT_DIR;
   list.sort((a,b)=>{
     const va=_projValue(a,key), vb=_projValue(b,key);
@@ -4781,11 +4796,18 @@ function renderProjectList(){
     {key:'has_video',   label:t('col.video')},
     {key:'has_music',   label:t('col.music')},
     {key:'mtime',       label:t('col.mtime')},
+    {key:'tags',        label:t('col.tags'), nosort:true},  // chips editables, non triable
     ...metricCols.map(k=>({key:k, label:_metricLabel(k), metric:true})),
   ];
   head.innerHTML='';
   for(const c of cols){
     const th=document.createElement('th');
+    if(c.nosort){                       // colonne interactive : pas de tri
+      th.textContent=c.label;
+      th.className='proj-th tags';
+      head.appendChild(th);
+      continue;
+    }
     const arrow=(PROJ_SORT_KEY===c.key)?(PROJ_SORT_DIR>0?' ▲':' ▼'):'';
     th.textContent=c.label+arrow;
     th.className='proj-th'+(c.metric?' metric':'')+(PROJ_SORT_KEY===c.key?' active':'');
@@ -4811,7 +4833,8 @@ function renderProjectList(){
       `<td>${escHtml(b.source_clip||'—')}</td>`+
       `<td class="ctr">${b.has_video?'✓':'—'}</td>`+
       `<td class="ctr">${b.has_music?'✓':'—'}</td>`+
-      `<td class="ctr">${b.mtime?fmtMtime(b.mtime):'—'}</td>`;
+      `<td class="ctr">${b.mtime?fmtMtime(b.mtime):'—'}</td>`+
+      `<td class="tags-cell"></td>`;   // peuplee ci-dessous (noeud interactif)
     for(const k of metricCols){
       const v=m && m[k];
       // metriques pas encore calculees (job de fond) -> placeholder discret « … »
@@ -4821,6 +4844,8 @@ function renderProjectList(){
       cells+=`<td class="ctr metric">${cell}</td>`;
     }
     tr.innerHTML=cells;
+    const tagsTd=tr.querySelector('td.tags-cell');
+    if(tagsTd) _renderTagsCell(tagsTd, b.name);
     const open=()=>selectProject(b.name);
     tr.onclick=open;
     tr.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } };
@@ -4829,6 +4854,139 @@ function renderProjectList(){
   if(cnt) cnt.textContent = list.length
     ? tf('proj.count',{count:list.length})
     : t('proj.none');
+}
+
+// ---- tags : suggestions (datalist), cellule editable, filtre ----
+
+// (re)remplit le <datalist id="proj-tags-list"> a partir de PROJ_ALL_TAGS pour
+// l'autocompletion des champs « + tag » (un nouveau libelle reste autorise).
+function _syncTagDatalist(){
+  let dl=$('proj-tags-list');
+  if(!dl){
+    dl=document.createElement('datalist');
+    dl.id='proj-tags-list';
+    document.body.appendChild(dl);
+  }
+  dl.innerHTML='';
+  for(const tag of PROJ_ALL_TAGS){
+    const o=document.createElement('option');
+    o.value=tag;
+    dl.appendChild(o);
+  }
+}
+
+// peuple une cellule « Tags » : chips avec « × » (retrait) + bouton « ＋ tag »
+// qui revele un champ (autocomplete via datalist). stopPropagation partout pour
+// ne pas declencher le chargement de la ligne.
+function _renderTagsCell(td, clip){
+  _syncTagDatalist();
+  td.innerHTML='';
+  td.onclick=e=>e.stopPropagation();      // les clics dans la cellule n'ouvrent pas le projet
+  const wrap=document.createElement('div');
+  wrap.className='proj-tags';
+
+  const tags=clipTags(clip);
+  for(const tag of tags){
+    const chip=document.createElement('span');
+    chip.className='proj-tag';
+    const lbl=document.createElement('span');
+    lbl.className='proj-tag-lbl';
+    lbl.textContent=tag;
+    chip.appendChild(lbl);
+    const x=document.createElement('button');
+    x.type='button';
+    x.className='proj-tag-x';
+    x.textContent='×';
+    x.title=t('tags.remove');
+    x.setAttribute('aria-label', t('tags.remove')+' : '+tag);
+    x.onclick=ev=>{
+      ev.stopPropagation();
+      const next=clipTags(clip).filter(tg=>tg!==tag);
+      PROJ_TAGS[clip]=next;            // mise a jour optimiste
+      _renderTagsCell(td, clip);
+      saveClipTags(clip, next);
+    };
+    chip.appendChild(x);
+    wrap.appendChild(chip);
+  }
+
+  // bouton « ＋ tag » -> revele un champ texte (avec autocomplete datalist).
+  const add=document.createElement('button');
+  add.type='button';
+  add.className='proj-tag-add';
+  add.textContent=t('tags.add');
+  add.title=t('tags.add');
+  add.onclick=ev=>{
+    ev.stopPropagation();
+    add.style.display='none';
+    const inp=document.createElement('input');
+    inp.type='text';
+    inp.className='proj-tag-input';
+    inp.setAttribute('list','proj-tags-list');
+    inp.placeholder=t('tags.placeholder');
+    inp.autocomplete='off';
+    const commit=()=>{
+      const val=(inp.value||'').trim();
+      if(!val){ _renderTagsCell(td, clip); return; }
+      const cur=clipTags(clip);
+      if(cur.includes(val)){ _renderTagsCell(td, clip); return; }
+      const next=cur.concat([val]);
+      PROJ_TAGS[clip]=next;            // mise a jour optimiste
+      _renderTagsCell(td, clip);
+      saveClipTags(clip, next);
+    };
+    inp.onclick=e2=>e2.stopPropagation();
+    inp.onkeydown=e2=>{
+      e2.stopPropagation();           // ne pas laisser remonter aux raccourcis globaux
+      if(e2.key==='Enter'){ e2.preventDefault(); commit(); }
+      else if(e2.key==='Escape'){ e2.preventDefault(); _renderTagsCell(td, clip); }
+    };
+    inp.onblur=()=>commit();
+    wrap.appendChild(inp);
+    inp.focus();
+  };
+  wrap.appendChild(add);
+
+  td.appendChild(wrap);
+}
+
+// rendu de la barre de filtre par tag (#proj-tag-filter) : « tous » + une puce
+// bascule par tag connu (ANY). N'affiche rien s'il n'existe aucun tag.
+function renderTagFilter(){
+  const box=$('proj-tag-filter');
+  if(!box) return;
+  box.innerHTML='';
+  if(!PROJ_ALL_TAGS.length){ box.style.display='none'; return; }
+  box.style.display='';
+
+  const label=document.createElement('span');
+  label.className='proj-tagf-label';
+  label.textContent=t('tags.filter');
+  box.appendChild(label);
+
+  // « tous » : actif quand aucun tag n'est selectionne -> reinitialise le filtre.
+  const all=document.createElement('button');
+  all.type='button';
+  all.className='proj-tagf-chip'+(PROJ_TAG_FILTER.size?'':' active');
+  all.textContent=t('tags.all');
+  all.onclick=()=>{ PROJ_TAG_FILTER.clear(); renderTagFilter(); renderProjectList(); };
+  box.appendChild(all);
+
+  for(const tag of PROJ_ALL_TAGS){
+    const chip=document.createElement('button');
+    chip.type='button';
+    const on=PROJ_TAG_FILTER.has(tag);
+    chip.className='proj-tagf-chip'+(on?' active':'');
+    chip.textContent=tag;
+    chip.setAttribute('aria-pressed', on?'true':'false');
+    chip.onclick=()=>{
+      if(PROJ_TAG_FILTER.has(tag)) PROJ_TAG_FILTER.delete(tag);
+      else PROJ_TAG_FILTER.add(tag);
+      renderTagFilter();
+      renderProjectList();
+    };
+    box.appendChild(chip);
+  }
 }
 
 // charge un projet par nom + memorise l'index courant pour la nav ◀ ▶.
@@ -4848,9 +5006,55 @@ function projStep(delta){
   selectProject(_projOrder[i]);
 }
 
-// (re)charge le workspace puis re-rend la table (utilise au boot + apres imports).
+// tags d'un clip (tableau, jamais null) — repli sur [] si inconnu.
+function clipTags(name){
+  const v=PROJ_TAGS[name];
+  return Array.isArray(v)? v : [];
+}
+
+// (re)charge les tags (GET /tags) dans PROJ_TAGS + PROJ_ALL_TAGS.
+async function loadTags(){
+  try{
+    const r=await fetch('/tags');
+    if(!r.ok) throw new Error('/tags '+r.status);
+    const j=await r.json();
+    PROJ_TAGS=(j && j.tags && typeof j.tags==='object')? j.tags : {};
+    PROJ_ALL_TAGS=Array.isArray(j && j.all_tags)? j.all_tags : [];
+  }catch(_){
+    PROJ_TAGS={}; PROJ_ALL_TAGS=[];
+  }
+}
+
+// enregistre la liste COMPLETE des tags d'un clip (POST /tags remplace), puis
+// met a jour PROJ_TAGS[clip] + PROJ_ALL_TAGS depuis la reponse nettoyee serveur.
+async function saveClipTags(clip, tags){
+  try{
+    const r=await fetch('/tags',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({clip, tags}),
+    });
+    if(!r.ok) throw new Error('/tags '+r.status);
+    const j=await r.json();
+    const cleaned=Array.isArray(j && j.tags)? j.tags : [];
+    if(cleaned.length) PROJ_TAGS[clip]=cleaned; else delete PROJ_TAGS[clip];
+    if(Array.isArray(j && j.all_tags)) PROJ_ALL_TAGS=j.all_tags;
+  }catch(_){
+    // en cas d'echec reseau, on recharge l'etat serveur (verite) pour ne pas mentir.
+    await loadTags();
+  }
+  // retire du filtre tout tag qui n'existe plus nulle part.
+  for(const tag of Array.from(PROJ_TAG_FILTER)){
+    if(!PROJ_ALL_TAGS.includes(tag)) PROJ_TAG_FILTER.delete(tag);
+  }
+  renderTagFilter();
+  renderProjectList();
+}
+
+// (re)charge le workspace + les tags puis re-rend la table (boot + apres imports).
 async function refreshProjects(force){
-  await loadWorkspace(!!force);
+  await Promise.all([loadWorkspace(!!force), loadTags()]);
+  renderTagFilter();
   renderProjectList();
 }
 
@@ -5363,6 +5567,11 @@ window.__POSE_EDITOR__ = { get ready(){return !!DATA;}, get N(){return N;},
   // --- liste unifiee des projets + chargement (smoke-test) ---
   openPklPicker, openFolderDialog,
   refreshProjects, renderProjectList, selectProject, projStep,
+  // --- tags libres par clip (smoke-test) ---
+  clipTags, renderTagFilter,
+  get projAllTags(){ return PROJ_ALL_TAGS.slice(); },
+  get projTagFilter(){ return Array.from(PROJ_TAG_FILTER); },
+  setTagFilter(tags){ PROJ_TAG_FILTER=new Set(tags||[]); renderTagFilter(); renderProjectList(); },
   get projOrder(){ return _projOrder.slice(); },
   get projCurrent(){ return PROJ_CURRENT; },
   get hasMetrics(){ return PROJ_HAS_METRICS; },

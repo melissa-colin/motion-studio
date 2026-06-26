@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-clip tags** in the projects browser: free-form, multi-label labels
+  (e.g. "à supprimer", "sol cassé", "parfait") to group and triage the library.
+  Editable chips per row plus a tag filter bar (ANY: a clip passes if it carries
+  at least one selected tag). Stored workspace-level in `tags.json`, not in the
+  `.motion` bundles. New endpoints `GET /tags` and `POST /tags`.
+
 ## [0.1.3] - 2026-06-11
 
 ### Changed

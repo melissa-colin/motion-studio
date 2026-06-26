@@ -30,6 +30,11 @@ from .state import HeavyBusyError
 bp = Blueprint("bundle", __name__)
 
 _comments_lock = threading.Lock()
+_tags_lock = threading.Lock()
+
+# Bounds on user labels so the store stays small and the UI tidy.
+_MAX_TAG_LEN = 40
+_MAX_TAGS_PER_CLIP = 20
 
 # Media file extensions are echoed into Content-Type and into the ``.motion``
 # zip member name; constrain them to a short lowercase-alphanumeric token so an
@@ -486,6 +491,95 @@ def save_floor():
             "plane": [a, b, c],
             "tilt_deg": round(tilt, 4),
         }
+    )
+
+
+# -- clip tags / lists ----------------------------------------------------
+# Free-form, multi-label tags per clip (e.g. "à supprimer", "sol cassé",
+# "parfait"), stored in a small workspace JSON so the projects browser can show
+# and filter by them. Like comments, they are workspace-level, not in bundles.
+
+
+def _tags_store(st) -> str:
+    """Return the path of the workspace tags store."""
+    return os.path.join(st.config.workspace, "tags.json")
+
+
+def _load_tags(st) -> dict:
+    """Return the ``{clip: [tag, ...]}`` map (``{}`` if missing/unreadable)."""
+    path = _tags_store(st)
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_tags(st, data: dict) -> None:
+    """Atomically persist the tags map."""
+    path = _tags_store(st)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def _all_tags(data: dict) -> list:
+    """Return the sorted set of every tag used across clips."""
+    seen: set = set()
+    for tags in data.values():
+        if isinstance(tags, list):
+            seen.update(t for t in tags if isinstance(t, str))
+    return sorted(seen)
+
+
+@bp.get("/tags")
+def get_tags():
+    """Return ``{tags: {clip: [...]}, all_tags: [...]}`` for the workspace."""
+    st = state()
+    with _tags_lock:
+        data = _load_tags(st)
+    return jsonify({"tags": data, "all_tags": _all_tags(data)})
+
+
+@bp.post("/tags")
+def set_tags():
+    """Replace a clip's tags. Body: ``{clip, tags: [str, ...]}``.
+
+    An empty ``tags`` list removes the clip from the store. Tags are trimmed,
+    de-duplicated, length-capped and count-capped. Returns the cleaned tags and
+    the updated ``all_tags`` set.
+    """
+    st = state()
+    p = request.get_json(silent=True) or {}
+    clip, err = check_name(p.get("clip"))
+    if err:
+        return json_error(err)
+    raw = p.get("tags")
+    if not isinstance(raw, list):
+        return json_error("expected {clip, tags: [...]}")
+    clean: list = []
+    for t in raw:
+        if not isinstance(t, str):
+            continue
+        s = t.strip()[:_MAX_TAG_LEN]
+        if s and s not in clean:
+            clean.append(s)
+        if len(clean) >= _MAX_TAGS_PER_CLIP:
+            break
+    with _tags_lock:
+        data = _load_tags(st)
+        if clean:
+            data[clip] = clean
+        else:
+            data.pop(clip, None)
+        _save_tags(st, data)
+        all_tags = _all_tags(data)
+    return jsonify(
+        {"ok": True, "clip": clip, "tags": clean, "all_tags": all_tags}
     )
 
 

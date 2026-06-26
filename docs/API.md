@@ -59,6 +59,17 @@ if they contain `/`, `..`, or start with `.`.
 - `POST /comments?clip=` body `{user,text}` -> `{comments:[...]}`
 - `POST /import` multipart `{pkl, video?, music?, name?}` -> `{ok, name, N, T, ...}`
 
+## Clip tags (new)
+
+Free-form, multi-label tags per clip (e.g. "à supprimer", "sol cassé",
+"parfait") so the projects browser can group and filter the library. Stored in a
+workspace `tags.json`, not in the `.motion` bundles.
+
+- `GET /tags` -> `{tags:{clip:[...]}, all_tags:[...]}` for the whole workspace
+- `POST /tags` body `{clip, tags:[str, ...]}` -> `{ok, clip, tags:[...], all_tags:[...]}`
+  Replaces a clip's tags; an empty list removes the clip from the store. Tags are
+  trimmed, de-duplicated, length-capped (40 chars) and count-capped (20/clip).
+
 ## Export (kept)
 
 - `POST /export_pkl?clip=&source=` body `{N,T,J,joints,source?}` ->

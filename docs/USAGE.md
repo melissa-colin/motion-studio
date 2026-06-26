@@ -44,6 +44,11 @@ When a real metrics plugin is configured, each clip's reference metrics are
 computed on open (and warmed in the background for the whole library) so the
 Projects list is sortable by metric.
 
+Each row also has a **Tags** column: add free-form labels (e.g. "à supprimer",
+"sol cassé", "parfait") to triage your library, then use the **filter by tag**
+bar above the table to show only clips carrying one of the selected tags. Tags
+are saved per workspace (in `tags.json`), not inside the `.motion` files.
+
 ## 3. Edit the motion
 
 ![The 3D editor](img/editor.png)
